@@ -1,0 +1,150 @@
+# Project Prompt: Role-Based Task Manager System (React + Node.js + Supabase)
+
+## Project Overview
+Build a **production-ready, full-stack Task Management System** using **React.js** (frontend), **Node.js + Express.js** (backend API), and **Supabase (PostgreSQL)** as the single database and authentication provider. **No MongoDB or any other database should be used — Supabase is the only data store.** The system supports two roles — **Admin** and **Employee** — with strict role-based access control, a **flexible, admin-defined task deadline** (e.g., 12 hours, 3 days, 1 week) with automatic status updates when the deadline passes, and a daily attendance tracking module.
+
+---
+
+## Tech Stack
+- **Frontend:** React.js (Vite), Redux Toolkit or React Query for state management, React Router for navigation
+- **Backend:** Node.js + Express.js (REST API)
+- **Database:** Supabase (PostgreSQL) — the only database used in this project
+- **Authentication:** Supabase Auth (email/password, JWT-based sessions)
+- **Scheduled Jobs:** Supabase Edge Functions with `pg_cron` (recommended), or Vercel Cron Jobs calling a serverless API route (for automatic deadline-based status updates)
+- **Hosting/Deployment:** Both frontend (React) and backend (Express API) deployed entirely on **Vercel**, Database on Supabase Cloud
+
+---
+
+## User Roles & Permissions
+
+### Admin
+- Create, edit, delete tasks
+- Assign tasks to specific employees
+- **Set a custom deadline duration per task** (e.g., 12 hours, 1 day, 3 days, 1 week — fully flexible, not fixed)
+- Mark any task as complete/incomplete manually (override system)
+- View all employees' tasks and attendance records
+- View dashboard/analytics of task and attendance status
+- Manage employee accounts (create, deactivate, reset password)
+
+### Employee
+- View only the tasks assigned to them
+- Cannot create, edit, or delete tasks
+- Mark their own attendance (check-in / check-out)
+- View their own attendance history
+- View a live countdown/timer for each task's remaining deadline
+
+---
+
+## Authentication System
+- Single login page with role-based redirection (Admin Dashboard vs Employee Dashboard)
+- Supabase Auth for signup/login (email + password)
+- Role stored in a `role` field (`admin` / `employee`) in the `users`/`profiles` table
+- JWT token validation on both frontend (protected routes) and backend (middleware) to enforce role-based access
+- Passwords hashed and managed securely via Supabase Auth (no plain text storage)
+- Session persistence with auto-logout on token expiry
+- Row Level Security (RLS) policies enabled on all Supabase tables so employees can only query their own data, and admins can query everything
+
+---
+
+## Core Feature: Flexible Deadline-Based Auto Status Update
+- When creating a task, the **Admin selects a duration** for how long the employee has to complete it — this can be **hours, days, or weeks** (e.g., 12 hours, 3 days, 7 days), stored via a `duration_value` and `duration_unit` (or a single `deadline` timestamp calculated at creation time).
+- `deadline = created_at + duration` (calculated automatically once the Admin picks the duration)
+- A scheduled job runs periodically (e.g., every 5–15 minutes) and checks for tasks where:
+  - `status = 'pending'` or `'in_progress'`
+  - `deadline < current_time`
+- Any matching task is **automatically updated to `status = 'incomplete'`**
+- If the employee marks the task as complete **before** the deadline, `status = 'completed'` and `completed_at` is recorded
+- Employees see a **live countdown timer** on each task (days/hours/minutes remaining) with color-coded urgency (e.g., green → yellow → red as deadline approaches)
+- Optional: warning notification sent when 10–20% of the allotted time remains
+
+---
+
+## Database Schema (Supabase / PostgreSQL Only)
+
+### `profiles` (linked to Supabase Auth `auth.users`)
+| Column | Type | Description |
+|---|---|---|
+| id | UUID (PK, FK to auth.users) | User ID |
+| full_name | text | Full name |
+| email | text | Email address |
+| role | text (enum: admin/employee) | User role |
+| created_at | timestamptz | Account creation date |
+
+### `tasks`
+| Column | Type | Description |
+|---|---|---|
+| id | UUID (PK) | Task ID |
+| title | text | Task title |
+| description | text | Task details |
+| assigned_to | UUID (FK -> profiles.id) | Employee assigned |
+| assigned_by | UUID (FK -> profiles.id) | Admin who assigned it |
+| duration_value | integer | Numeric duration set by Admin (e.g., 3) |
+| duration_unit | text (enum: hours/days/weeks) | Unit of duration |
+| status | text (enum: pending/in_progress/completed/incomplete) | Current status |
+| created_at | timestamptz | When task was assigned |
+| deadline | timestamptz | created_at + duration (calculated) |
+| completed_at | timestamptz (nullable) | When marked complete |
+
+### `attendance`
+| Column | Type | Description |
+|---|---|---|
+| id | UUID (PK) | Attendance record ID |
+| employee_id | UUID (FK -> profiles.id) | Employee reference |
+| date | date | Attendance date |
+| check_in | timestamptz | Check-in time |
+| check_out | timestamptz (nullable) | Check-out time |
+| status | text (enum: present/absent/late) | Attendance status |
+
+---
+
+## API Endpoints (Suggested Structure)
+
+**Auth**
+- `POST /api/auth/signup` (admin-created employee accounts)
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+
+**Tasks**
+- `POST /api/tasks` — Admin only: create task (with `duration_value` + `duration_unit`)
+- `PUT /api/tasks/:id` — Admin only: edit task
+- `DELETE /api/tasks/:id` — Admin only: delete task
+- `PATCH /api/tasks/:id/status` — Admin: mark complete/incomplete manually
+- `GET /api/tasks` — Admin: view all tasks / Employee: view own tasks only
+
+**Attendance**
+- `POST /api/attendance/check-in` — Employee only
+- `POST /api/attendance/check-out` — Employee only
+- `GET /api/attendance` — Admin: view all / Employee: view own
+
+---
+
+## Production-Readiness Requirements (Vercel Deployment)
+The final web app must be deployment-grade, not a prototype, and structured to deploy cleanly on **Vercel**. This includes:
+
+1. **Vercel-Compatible Project Structure**
+   - Frontend: standard React (Vite) app deployed as a Vercel Static/SPA project.
+   - Backend: Express routes converted into **Vercel Serverless Functions** under an `/api` directory (e.g., `api/tasks/index.js`, `api/auth/login.js`), OR the Express app wrapped and exported as a single serverless handler (e.g., using `serverless-http`) if you prefer to keep one Express app. A single `vercel.json` should define builds/routes/rewrites so `/api/*` requests are routed to the serverless functions and all other routes serve the React SPA.
+2. **Automatic Deadline Job via Vercel Cron**
+   - Since Vercel functions are stateless and don't support long-running `node-cron` processes, use **Vercel Cron Jobs** (configured in `vercel.json` under `"crons"`) to hit a protected API route (e.g., `/api/cron/check-deadlines`) every 5–15 minutes, which runs the "mark overdue tasks as incomplete" logic against Supabase.
+   - Alternative/backup approach: use Supabase's own `pg_cron` (Edge Function scheduled trigger) so the deadline check runs at the database level independent of Vercel's cron limits.
+3. **Environment Variables on Vercel** — All secrets (Supabase URL, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, JWT secret, cron secret) configured via the Vercel dashboard's Environment Variables settings (separate values for Production/Preview/Development), never committed to the repo.
+4. **Security Hardening** — HTTPS enforced by default on Vercel, CORS configured to allow only the deployed frontend origin, input validation/sanitization (e.g., `zod`), rate limiting on auth and write endpoints, Supabase Row Level Security (RLS) on every table, and the cron endpoint protected by a secret header/token so it can't be triggered publicly.
+5. **Error Handling & Logging** — Consistent error responses from all serverless functions, and use Vercel's built-in function logs plus an external monitoring tool (e.g., Sentry) for uncaught exceptions.
+6. **Performance** — Database indexes on frequently queried columns (`assigned_to`, `status`, `deadline`), pagination on list endpoints, code-splitting on the React frontend, and Vercel's built-in CDN/edge caching for static assets.
+7. **CI/CD Pipeline** — Connect the GitHub repository directly to Vercel for automatic Preview Deployments on every pull request and automatic Production Deployment on merge to `main`; add linting (ESLint/Prettier) as a pre-deploy check.
+8. **Automated Testing** — Unit tests (Jest) for backend logic including the deadline auto-update job, integration tests for role-based access, and basic end-to-end tests (Cypress/Playwright) for critical flows (login, task assignment, attendance) run in CI before deployment.
+9. **Responsive, Accessible UI** — Fully responsive across mobile/tablet/desktop, semantic HTML, keyboard navigation, and WCAG-friendly color contrast.
+10. **Database Backups & Recovery** — Enable Supabase's automated daily backups and document a recovery process.
+11. **Uptime & Cron Monitoring** — A health-check endpoint (`/api/health`) plus monitoring (e.g., UptimeRobot, or Vercel's own cron run logs) to confirm the deadline-check cron job is actually firing on schedule.
+
+
+
+---
+
+## Deliverable Expectations
+- Clean, modular folder structure (separate `client/` and `server/` directories)
+- RESTful API with proper error handling and consistent status codes
+- Role-based route protection on both frontend (React Router guards) and backend (Express middleware) plus Supabase RLS as a final security layer
+- Well-documented `.env.example` file for Supabase keys and JWT secrets
+- README with setup instructions, schema diagram, API documentation, and deployment steps
+- Fully deployed, publicly accessible production URL for both frontend and backend

@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Role-Based Task Manager API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: users
+    description: User profile operations
+  - name: tasks
+    description: Task management operations
+  - name: attendance
+    description: Attendance tracking operations
+  - name: analytics
+    description: Dashboard analytics
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,321 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Users / Profiles ───────────────────────────────────────────────────────
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Get current user profile
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+
+  /users/me/sync:
+    post:
+      operationId: syncMe
+      tags: [users]
+      summary: Sync current user from Clerk into profiles table (JIT provisioning)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSync"
+      responses:
+        "200":
+          description: Synced user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List all employee users (Admin only)
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+
+  /users/{userId}:
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by ID (Admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "404":
+          description: Not found
+
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user (Admin only — e.g. deactivate)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  # ─── Tasks ──────────────────────────────────────────────────────────────────
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks — Admin sees all, Employee sees only own
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a new task (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/{taskId}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      summary: Get a single task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Not found
+
+    put:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Update a task (Admin only)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskEdit"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      summary: Delete a task (Admin only)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /tasks/{taskId}/status:
+    patch:
+      operationId: updateTaskStatus
+      tags: [tasks]
+      summary: Update task status (Admin override or Employee complete)
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskStatusUpdate"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  # ─── Attendance ──────────────────────────────────────────────────────────────
+  /attendance:
+    get:
+      operationId: listAttendance
+      tags: [attendance]
+      summary: List attendance records — Admin sees all, Employee sees own
+      responses:
+        "200":
+          description: List of attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/check-in:
+    post:
+      operationId: checkIn
+      tags: [attendance]
+      summary: Employee check-in for today
+      responses:
+        "201":
+          description: Created attendance record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/check-out:
+    post:
+      operationId: checkOut
+      tags: [attendance]
+      summary: Employee check-out for today
+      responses:
+        "200":
+          description: Updated attendance record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+
+  /attendance/today:
+    get:
+      operationId: getTodayAttendance
+      tags: [attendance]
+      summary: Get current employee's attendance for today
+      responses:
+        "200":
+          description: Today's attendance record or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceRecord"
+        "404":
+          description: No record today
+
+  # ─── Analytics (Admin-only wow endpoints) ────────────────────────────────────
+  /analytics/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [analytics]
+      summary: Admin dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /analytics/task-status-breakdown:
+    get:
+      operationId: getTaskStatusBreakdown
+      tags: [analytics]
+      summary: Task counts grouped by status
+      responses:
+        "200":
+          description: Task status breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StatusCount"
+
+  /analytics/attendance-summary:
+    get:
+      operationId: getAttendanceSummary
+      tags: [analytics]
+      summary: Attendance summary for last 7 days
+      responses:
+        "200":
+          description: Attendance summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AttendanceDaySummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +358,187 @@ components:
       required:
         - status
 
+    # ─── User Profiles ──────────────────────────────────────────────────────
+    UserProfile:
+      type: object
+      required: [id, clerkId, fullName, email, role, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        clerkId:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, employee]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    UserSync:
+      type: object
+      required: [fullName, email]
+      properties:
+        fullName:
+          type: string
+        email:
+          type: string
+
+    UserUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        isActive:
+          type: boolean
+        role:
+          type: string
+          enum: [admin, employee]
+
+    # ─── Tasks ──────────────────────────────────────────────────────────────
+    Task:
+      type: object
+      required: [id, title, description, assignedTo, assignedBy, durationValue, durationUnit, status, createdAt, deadline]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        assignedTo:
+          type: string
+        assignedBy:
+          type: string
+        assignedToName:
+          type: ["string", "null"]
+        assignedByName:
+          type: ["string", "null"]
+        durationValue:
+          type: number
+        durationUnit:
+          type: string
+          enum: [hours, days, weeks]
+        status:
+          type: string
+          enum: [pending, in_progress, completed, incomplete]
+        createdAt:
+          type: string
+        deadline:
+          type: string
+        completedAt:
+          type: ["string", "null"]
+
+    TaskInput:
+      type: object
+      required: [title, description, assignedTo, durationValue, durationUnit]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        assignedTo:
+          type: string
+        durationValue:
+          type: number
+          minimum: 1
+        durationUnit:
+          type: string
+          enum: [hours, days, weeks]
+
+    TaskEdit:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        assignedTo:
+          type: string
+        durationValue:
+          type: number
+          minimum: 1
+        durationUnit:
+          type: string
+          enum: [hours, days, weeks]
+
+    TaskStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, in_progress, completed, incomplete]
+
+    # ─── Attendance ─────────────────────────────────────────────────────────
+    AttendanceRecord:
+      type: object
+      required: [id, employeeId, date, checkIn, status]
+      properties:
+        id:
+          type: string
+        employeeId:
+          type: string
+        employeeName:
+          type: ["string", "null"]
+        date:
+          type: string
+        checkIn:
+          type: string
+        checkOut:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [present, absent, late]
+
+    # ─── Analytics ──────────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [totalTasks, pendingTasks, completedTasks, incompleteTasks, totalEmployees, presentToday, overdueTasksCount]
+      properties:
+        totalTasks:
+          type: number
+        pendingTasks:
+          type: number
+        completedTasks:
+          type: number
+        incompleteTasks:
+          type: number
+        inProgressTasks:
+          type: number
+        totalEmployees:
+          type: number
+        presentToday:
+          type: number
+        overdueTasksCount:
+          type: number
+
+    StatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          type: string
+        count:
+          type: number
+
+    AttendanceDaySummary:
+      type: object
+      required: [date, present, absent, late, total]
+      properties:
+        date:
+          type: string
+        present:
+          type: number
+        absent:
+          type: number
+        late:
+          type: number
+        total:
+          type: number
