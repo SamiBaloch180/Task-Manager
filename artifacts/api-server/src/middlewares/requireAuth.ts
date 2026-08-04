@@ -1,56 +1,61 @@
-import { getAuth } from "@clerk/express";
 import type { Request, Response, NextFunction } from "express";
-import { db } from "@workspace/db";
-import { profilesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { verifyToken, supabaseAdmin } from "../lib/supabase";
 
-// Attaches userId + profile to the request
+export interface AuthRequest extends Request {
+  supabaseUserId?: string;
+  userProfile?: {
+    id: string;
+    full_name: string;
+    email: string;
+    role: "admin" | "employee";
+    is_active: boolean;
+    created_at: string;
+  } | null;
+}
+
+function extractToken(req: Request): string | null {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith("Bearer ")) return auth.slice(7);
+  return null;
+}
+
 export async function requireAuth(
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const auth = getAuth(req);
-  const clerkId = auth?.userId;
-  if (!clerkId) {
+  const token = extractToken(req);
+  if (!token) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const [profile] = await db
-    .select()
-    .from(profilesTable)
-    .where(eq(profilesTable.clerkId, clerkId));
+  const user = await verifyToken(token);
+  if (!user) {
+    res.status(401).json({ error: "Invalid or expired token" });
+    return;
+  }
 
-  (req as any).clerkId = clerkId;
-  (req as any).userProfile = profile ?? null;
+  req.supabaseUserId = user.id;
+
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  req.userProfile = profile ?? null;
   next();
 }
 
 export async function requireAdmin(
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
   await requireAuth(req, res, () => {
-    const profile = (req as any).userProfile;
-    if (!profile || profile.role !== "admin") {
+    if (!req.userProfile || req.userProfile.role !== "admin") {
       res.status(403).json({ error: "Admin access required" });
-      return;
-    }
-    next();
-  });
-}
-
-export async function requireEmployee(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> {
-  await requireAuth(req, res, () => {
-    const profile = (req as any).userProfile;
-    if (!profile) {
-      res.status(401).json({ error: "Profile not found" });
       return;
     }
     next();
