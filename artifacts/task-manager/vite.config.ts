@@ -12,8 +12,13 @@ export default defineConfig(({ mode }) => {
   base: basePath,
   define: {
     // Expose Supabase vars (anon key is safe for the browser)
-    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.SUPABASE_URL ?? ''),
-    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY ?? ''),
+    // Supports both VITE_SUPABASE_URL and SUPABASE_URL env var names on Vercel
+    'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(
+      env.VITE_SUPABASE_URL ?? env.SUPABASE_URL ?? 'https://nzbndejhzcctvqxnozeq.supabase.co'
+    ),
+    'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(
+      env.VITE_SUPABASE_ANON_KEY ?? env.SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56Ym5kZWpoemNjdHZxeG5vemVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NzU0NzYsImV4cCI6MjEwMTM1MTQ3Nn0.57R1cpni1cgMd7icmUiN89G8vGDn--rgyiaS22-JGYQ'
+    ),
   },
   plugins: [
     react(),

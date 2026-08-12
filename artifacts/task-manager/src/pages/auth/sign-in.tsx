@@ -18,6 +18,7 @@ const signInSchema = z.object({
 export default function SignIn() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
@@ -26,24 +27,33 @@ export default function SignIn() {
 
   async function onSubmit(values: z.infer<typeof signInSchema>) {
     setIsLoading(true);
+    setErrorMessage(null);
 
-    let internalEmail = values.userId.trim().toLowerCase();
-    if (!internalEmail.includes('@')) {
-      internalEmail = `${internalEmail}@taskforce.local`;
-    }
+    try {
+      let internalEmail = values.userId.trim().toLowerCase();
+      if (!internalEmail.includes('@')) {
+        internalEmail = `${internalEmail}@taskforce.local`;
+      }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: internalEmail,
-      password: values.password,
-    });
+      const { error } = await supabase.auth.signInWithPassword({
+        email: internalEmail,
+        password: values.password,
+      });
 
-    setIsLoading(false);
-
-    if (error) {
-      const msg = error.message.toLowerCase().includes('invalid login credentials')
-        ? 'Invalid User ID/Email or Password. Please try again.'
-        : error.message;
-      toast({ variant: 'destructive', title: 'Sign In Failed', description: msg });
+      if (error) {
+        const msg = error.message.toLowerCase().includes('invalid login credentials')
+          ? 'Invalid User ID/Email or Password. Please try again.'
+          : error.message;
+        setErrorMessage(msg);
+        toast({ variant: 'destructive', title: 'Sign In Failed', description: msg });
+      }
+    } catch (err: any) {
+      console.error("Sign in exception:", err);
+      const msg = err?.message || 'An unexpected error occurred during sign in. Please try again.';
+      setErrorMessage(msg);
+      toast({ variant: 'destructive', title: 'Sign In Error', description: msg });
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -61,6 +71,12 @@ export default function SignIn() {
             <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Welcome back</h1>
             <p className="text-xs text-muted-foreground mt-1">Enter your credentials to access TaskForce</p>
           </div>
+
+          {errorMessage && (
+            <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold rounded-xl p-3 mb-4 animate-in fade-in">
+              {errorMessage}
+            </div>
+          )}
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
