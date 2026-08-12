@@ -31,5 +31,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+// Vercel serverless functions in the /api directory strip the /api prefix from req.url
+app.use("/", router);
 
 export default app;
