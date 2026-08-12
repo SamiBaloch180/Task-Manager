@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { setAuthTokenGetter } from '@workspace/api-client-react';
@@ -29,6 +29,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const queryClient = useQueryClient();
+  // Keep latest token in a ref so the getter always has the freshest value
+  const tokenRef = useRef<string | null>(null);
+
+  // Register a stable token getter backed by the ref — set once, always fresh
+  useEffect(() => {
+    setAuthTokenGetter(() => Promise.resolve(tokenRef.current));
+    return () => setAuthTokenGetter(null);
+  }, []);
   
   // Use TanStack queries for profile
   const { data: profile, isLoading: isLoadingProfile, error, refetch: refetchProfile } = useGetMe({
@@ -45,9 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(({ data: { session } }) => {
         setSession(session);
         setUser(session?.user ?? null);
-        if (session?.access_token) {
-          setAuthTokenGetter(() => Promise.resolve(session.access_token));
-        }
+        tokenRef.current = session?.access_token ?? null;
       })
       .catch((err) => {
         console.error("Supabase getSession error:", err);
@@ -61,10 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.access_token) {
-        setAuthTokenGetter(() => Promise.resolve(session.access_token));
-      } else {
-        setAuthTokenGetter(() => Promise.resolve(null));
+      tokenRef.current = session?.access_token ?? null;
+      if (!session) {
         queryClient.clear();
       }
       setIsLoadingSession(false);
@@ -80,6 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 404 means profile doesn't exist yet, we need to sync it
       const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
       const email = user.email || '';
+      // Determine role from metadata (admin users set during sign-up flow)
+      const metaRole = user.user_metadata?.role || 'employee';
       
       syncMe.mutate({ data: { fullName, email } }, {
         onSuccess: () => {
@@ -92,11 +98,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [error, user, syncMe, refetchProfile]);
 
+  // Derive role: prefer DB profile, fall back to Supabase user_metadata so the
+  // dashboard is accessible immediately after sign-up even before sync completes.
+  const metaRole = (user?.user_metadata?.role as 'admin' | 'employee' | undefined) ?? null;
+  const resolvedRole = (profile?.role ?? metaRole) as 'admin' | 'employee' | null;
+
   const isProfileLoading = !!session && (isLoadingProfile || syncMe.isPending);
   const isLoading = isLoadingSession || isProfileLoading;
 
   return (
-    <AuthContext.Provider value={{ session, user, profile: profile || null, role: profile?.role || null, status: profile?.status || null, isLoading }}>
+    <AuthContext.Provider value={{
+      session,
+      user,
+      profile: profile || null,
+      role: resolvedRole,
+      status: profile?.status || null,
+      isLoading
+    }}>
       {children}
     </AuthContext.Provider>
   );

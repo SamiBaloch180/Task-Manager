@@ -103,6 +103,7 @@ function ProtectedRoute({ component: Component, allowedRole }: { component: Reac
     return <Redirect to="/sign-in" />;
   }
 
+  // Only block if explicitly pending or rejected (not null — null means profile still syncing)
   if (status === 'pending' || status === 'rejected') {
     return <PendingApproval status={status} />;
   }
@@ -121,6 +122,7 @@ function ProtectedRoute({ component: Component, allowedRole }: { component: Reac
     </Shell>
   );
 }
+
 
 function AuthRoute({ component: Component }: { component: React.ComponentType }) {
   const { session, role, status, isLoading } = useAuth();

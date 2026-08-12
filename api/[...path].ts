@@ -157,16 +157,19 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     if (!fullName || !email) {
       return send(res, 400, { error: "fullName and email are required" });
     }
+    // Determine role from auth user metadata; default to employee
+    const metaRole = (authUser.user_metadata?.role as string) || "employee";
     const { data, error } = await supabase
       .from("profiles")
       .upsert({
         id: authUser.id, full_name: fullName, email,
-        role: "employee", status: "pending", is_active: true,
+        role: metaRole, status: "approved", is_active: true,
       }, { onConflict: "id" })
       .select().single();
     if (error) return send(res, 500, { error: error.message });
     return send(res, 200, formatProfile(data));
   }
+
 
   // ─── GET /users ────────────────────────────────────────────────────────────
   if (path === "users" && method === "GET") {
