@@ -17,7 +17,7 @@ function extractToken(req: IncomingMessage): string | null {
 }
 
 async function getUser(token: string) {
-  const { data, error } = await supabase.auth.getUser(token);
+  const { data, error } = await (supabase.auth as any).getUser(token);
   if (error || !data.user) return null;
   return data.user;
 }
@@ -101,7 +101,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     if (!email || !password || !fullName) {
       return send(res, 400, { error: "email, password, and fullName are required" });
     }
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { data, error } = await (supabase.auth as any).admin.createUser({
       email, password,
       email_confirm: true,
       user_metadata: { full_name: fullName, role: "employee" },
@@ -113,7 +113,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
       }
       return send(res, 400, { error: msg });
     }
-    const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData } = await (supabase.auth as any).signInWithPassword({ email, password });
     return send(res, 201, {
       user: { id: data.user.id, email: data.user.email, fullName },
       session: signInData?.session ?? null,
@@ -124,11 +124,11 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   if (path === "auth/confirm-existing" && method === "POST") {
     const { email } = body as Record<string, string>;
     if (!email) return send(res, 400, { error: "email is required" });
-    const { data: listData } = await supabase.auth.admin.listUsers();
+    const { data: listData } = await (supabase.auth as any).admin.listUsers();
     const user = listData?.users.find((u: { email?: string }) => u.email === email);
     if (!user) return send(res, 404, { error: "User not found" });
     if (user.email_confirmed_at) return send(res, 200, { message: "Email already confirmed" });
-    await supabase.auth.admin.updateUserById(user.id, { email_confirm: true });
+    await (supabase.auth as any).admin.updateUserById(user.id, { email_confirm: true });
     return send(res, 200, { message: "Email confirmed. You can now sign in." });
   }
 
@@ -204,7 +204,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     const uid = userByIdMatch[1];
     await supabase.from("tasks").delete().eq("assigned_to", uid);
     await supabase.from("attendance").delete().eq("employee_id", uid);
-    const { error } = await supabase.auth.admin.deleteUser(uid);
+    const { error } = await (supabase.auth as any).admin.deleteUser(uid);
     if (error) return send(res, 500, { error: error.message });
     res.writeHead(204); res.end();
     return;
