@@ -3,7 +3,6 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "artifacts/task-manager/dist/public",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
