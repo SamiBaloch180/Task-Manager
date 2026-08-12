@@ -129,10 +129,7 @@ function AuthRoute({ component: Component }: { component: React.ComponentType })
     return <div className="h-screen w-full flex items-center justify-center"><div className="animate-pulse flex flex-col items-center"><div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div></div>;
   }
   
-  if (session) {
-    if (!role) {
-       return <ErrorProfileScreen />;
-    }
+  if (session && role) {
     if (status === 'pending' || status === 'rejected') {
       return <PendingApproval status={status} />;
     }
