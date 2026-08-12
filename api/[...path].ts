@@ -2,8 +2,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 
 // ─── Supabase admin client ────────────────────────────────────────────────────
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const DEFAULT_SUPABASE_URL = "https://nzbndejhzcctvqxnozeq.supabase.co";
+const DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56Ym5kZWpoemNjdHZxeG5vemVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NzU0NzYsImV4cCI6MjEwMTM1MTQ3Nn0.57R1cpni1cgMd7icmUiN89G8vGDn--rgyiaS22-JGYQ";
+
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { autoRefreshToken: false, persistSession: false },
