@@ -4,153 +4,125 @@ import { supabase } from '@/lib/supabase';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Target, Loader2 } from 'lucide-react';
+import { Target, Loader2, User, Lock, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-
 const signInSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  userId: z.string().min(1, 'User ID or Email is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
 export default function SignIn() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [showConfirmHelp, setShowConfirmHelp] = useState(false);
-  const [confirmEmail, setConfirmEmail] = useState('');
-  const [isConfirming, setIsConfirming] = useState(false);
 
   const form = useForm<z.infer<typeof signInSchema>>({
     resolver: zodResolver(signInSchema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { userId: '', password: '' },
   });
 
   async function onSubmit(values: z.infer<typeof signInSchema>) {
     setIsLoading(true);
-    setShowConfirmHelp(false);
+
+    let internalEmail = values.userId.trim().toLowerCase();
+    if (!internalEmail.includes('@')) {
+      internalEmail = `${internalEmail}@taskforce.local`;
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: values.email,
+      email: internalEmail,
       password: values.password,
     });
 
     setIsLoading(false);
 
     if (error) {
-      // "Email not confirmed" — offer a one-click fix via backend
-      if (error.message.toLowerCase().includes('email not confirmed')) {
-        setConfirmEmail(values.email);
-        setShowConfirmHelp(true);
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Sign In Failed',
-          description: error.message,
-        });
-      }
-    }
-    // On success, auth state change in use-auth.tsx handles redirect automatically
-  }
-
-  async function handleConfirmEmail() {
-    setIsConfirming(true);
-    try {
-      const res = await fetch(`${BASE}/api/auth/confirm-existing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: confirmEmail }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast({ title: 'Email confirmed', description: 'You can now sign in.' });
-        setShowConfirmHelp(false);
-        // Re-submit the form
-        form.handleSubmit(onSubmit)();
-      } else {
-        toast({ variant: 'destructive', title: 'Error', description: data.error });
-      }
-    } catch {
-      toast({ variant: 'destructive', title: 'Network error', description: 'Please try again.' });
-    } finally {
-      setIsConfirming(false);
+      const msg = error.message.toLowerCase().includes('invalid login credentials')
+        ? 'Invalid User ID/Email or Password. Please try again.'
+        : error.message;
+      toast({ variant: 'destructive', title: 'Sign In Failed', description: msg });
     }
   }
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-muted/30 p-4">
-      <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-background text-foreground p-4 relative overflow-hidden font-sans">
+      {/* Background Glow Elements */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] pointer-events-none -z-10" />
+
+      <div className="w-full max-w-md bg-card/90 border border-border/80 rounded-2xl shadow-xl shadow-black/5 backdrop-blur-md overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         <div className="p-8">
           <div className="flex flex-col items-center justify-center text-center mb-8">
-            <div className="bg-primary/10 p-3 rounded-full mb-4">
-              <Target className="h-8 w-8 text-primary" />
+            <div className="bg-primary/10 p-3.5 rounded-2xl mb-4 text-primary shadow-xs">
+              <Target className="h-7 w-7" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sign in to your TaskForce account</p>
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">Welcome back</h1>
+            <p className="text-xs text-muted-foreground mt-1">Enter your credentials to access TaskForce</p>
           </div>
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="email"
+                name="userId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email</FormLabel>
+                    <FormLabel className="text-xs font-semibold text-foreground">User ID or Email</FormLabel>
                     <FormControl>
-                      <Input placeholder="you@company.com" {...field} className="font-mono text-sm" />
+                      <div className="relative">
+                        <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          placeholder="e.g. EMP-101 or john@gmail.com" 
+                          {...field} 
+                          className="pl-9 font-mono text-xs rounded-lg bg-background/50 border-border/80 focus-visible:ring-primary" 
+                        />
+                      </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-[11px]" />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-xs font-semibold text-foreground">Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} className="font-mono" />
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          type="password" 
+                          placeholder="••••••••" 
+                          {...field} 
+                          className="pl-9 font-mono text-xs rounded-lg bg-background/50 border-border/80 focus-visible:ring-primary" 
+                        />
+                      </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-[11px]" />
                   </FormItem>
                 )}
               />
-              <Button type="submit" className="w-full font-bold mt-6" disabled={isLoading}>
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Sign In
+
+              <Button type="submit" className="w-full font-bold mt-6 h-10 rounded-xl shadow-md shadow-primary/20" disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    Sign In
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
               </Button>
             </form>
           </Form>
 
-          {showConfirmHelp && (
-            <div className="mt-4 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
-              <p className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-1">
-                Email not confirmed
-              </p>
-              <p className="text-xs text-muted-foreground mb-3">
-                Your account exists but the email hasn't been confirmed yet. Click below to confirm it instantly.
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                onClick={handleConfirmEmail}
-                disabled={isConfirming}
-              >
-                {isConfirming ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                Confirm email and sign in
-              </Button>
-            </div>
-          )}
-
-          <div className="mt-6 text-center text-sm text-muted-foreground border-t pt-6">
+          <div className="mt-6 text-center text-xs text-muted-foreground border-t border-border/60 pt-6">
             Don't have an account?{' '}
-            <Link href="/sign-up" className="text-primary font-semibold hover:underline">
+            <Link href="/sign-up" className="text-primary font-bold hover:underline">
               Create one
             </Link>
           </div>
@@ -159,3 +131,4 @@ export default function SignIn() {
     </div>
   );
 }
+

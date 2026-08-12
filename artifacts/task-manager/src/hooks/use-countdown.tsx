@@ -20,10 +20,10 @@ export function useCountdown(deadline: string | null | undefined) {
   }, [deadline]);
   
   if (!deadline) {
-    return { label: 'No deadline', color: 'text-muted-foreground', bgColor: 'bg-muted/50', pct: 0 };
+    return { label: 'No deadline', color: 'text-muted-foreground', bgColor: 'bg-muted/50', pct: 0, isOverdue: false };
   }
   
-  if (remaining <= 0) return { label: 'Overdue', color: 'text-destructive', bgColor: 'bg-destructive/10', pct: 0 };
+  if (remaining <= 0) return { label: 'Overdue', color: 'text-destructive', bgColor: 'bg-destructive/10', pct: 0, isOverdue: true };
   
   const d = Math.floor(remaining / 86400000);
   const h = Math.floor((remaining % 86400000) / 3600000);
@@ -51,5 +51,5 @@ export function useCountdown(deadline: string | null | undefined) {
     bgColor = 'bg-amber-500/10 dark:bg-amber-400/10';
   }
 
-  return { label, color, bgColor, pct: 100 }; // pct can be fleshed out if we have total duration
+  return { label, color, bgColor, pct: 100, isOverdue: false }; // pct can be fleshed out if we have total duration
 }

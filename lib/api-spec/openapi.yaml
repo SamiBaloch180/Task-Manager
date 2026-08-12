@@ -129,6 +129,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserProfile"
 
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user (Admin only)
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   # ─── Tasks ──────────────────────────────────────────────────────────────────
   /tasks:
     get:
@@ -361,7 +375,7 @@ components:
     # ─── User Profiles ──────────────────────────────────────────────────────
     UserProfile:
       type: object
-      required: [id, clerkId, fullName, email, role, isActive, createdAt]
+      required: [id, clerkId, fullName, email, role, status, isActive, createdAt]
       properties:
         id:
           type: string
@@ -374,6 +388,9 @@ components:
         role:
           type: string
           enum: [admin, employee]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
         isActive:
           type: boolean
         createdAt:
@@ -398,6 +415,9 @@ components:
         role:
           type: string
           enum: [admin, employee]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
 
     # ─── Tasks ──────────────────────────────────────────────────────────────
     Task:

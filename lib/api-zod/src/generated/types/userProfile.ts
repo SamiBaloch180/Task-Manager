@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UserProfileRole } from './userProfileRole';
+import type { UserProfileStatus } from './userProfileStatus';
 
 export interface UserProfile {
   id: string;
@@ -13,6 +14,7 @@ export interface UserProfile {
   fullName: string;
   email: string;
   role: UserProfileRole;
+  status: UserProfileStatus;
   isActive: boolean;
   createdAt: string;
 }

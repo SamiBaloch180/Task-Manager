@@ -13,22 +13,34 @@ async function enrichAttendance(records: Record<string, unknown>[]) {
   const ids = [...new Set(records.map((r) => r.employee_id as string))];
   const { data: profiles } = await supabaseAdmin
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, email")
     .in("id", ids);
 
-  const nameMap = new Map(
-    (profiles ?? []).map((p: { id: string; full_name: string }) => [p.id, p.full_name]),
+  const profileMap = new Map(
+    (profiles ?? []).map((p: { id: string; full_name: string; email: string }) => [
+      p.id,
+      {
+        name: p.full_name,
+        displayId: p.email.includes("@taskforce.local")
+          ? p.email.split("@")[0].toUpperCase()
+          : p.email,
+      },
+    ]),
   );
 
-  return records.map((r) => ({
-    id: r.id,
-    employeeId: r.employee_id,
-    employeeName: nameMap.get(r.employee_id as string) ?? null,
-    date: r.date,
-    checkIn: r.check_in,
-    checkOut: r.check_out ?? null,
-    status: r.status,
-  }));
+  return records.map((r) => {
+    const prof = profileMap.get(r.employee_id as string);
+    return {
+      id: r.id,
+      employeeId: r.employee_id,
+      employeeName: prof?.name ?? null,
+      displayUserId: prof?.displayId ?? null,
+      date: r.date,
+      checkIn: r.check_in,
+      checkOut: r.check_out ?? null,
+      status: r.status,
+    };
+  });
 }
 
 // GET /attendance
@@ -79,8 +91,7 @@ router.post("/attendance/check-in", requireAuth, async (req: AuthRequest, res): 
   }
 
   const now = new Date();
-  const hour = now.getHours();
-  const status = hour >= 9 ? "late" : "present"; // late if after 9 AM
+  const status = "present"; // always present — no time restrictions
 
   const { data, error } = await supabaseAdmin
     .from("attendance")
@@ -111,7 +122,7 @@ router.post("/attendance/check-out", requireAuth, async (req: AuthRequest, res):
     .maybeSingle();
 
   if (fetchErr || !existing) {
-    res.status(404).json({ error: "No check-in record found for today" });
+    res.status(404).json({ error: "No check-in record found for today. Please check in first." });
     return;
   }
 

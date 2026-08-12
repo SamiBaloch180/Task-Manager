@@ -17,12 +17,22 @@ export const UserProfileRole = {
   employee: 'employee',
 } as const;
 
+export type UserProfileStatus = typeof UserProfileStatus[keyof typeof UserProfileStatus];
+
+
+export const UserProfileStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
 export interface UserProfile {
   id: string;
   clerkId: string;
   fullName: string;
   email: string;
   role: UserProfileRole;
+  status: UserProfileStatus;
   isActive: boolean;
   createdAt: string;
 }
@@ -40,10 +50,20 @@ export const UserUpdateRole = {
   employee: 'employee',
 } as const;
 
+export type UserUpdateStatus = typeof UserUpdateStatus[keyof typeof UserUpdateStatus];
+
+
+export const UserUpdateStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
 export interface UserUpdate {
   fullName?: string;
   isActive?: boolean;
   role?: UserUpdateRole;
+  status?: UserUpdateStatus;
 }
 
 export type TaskDurationUnit = typeof TaskDurationUnit[keyof typeof TaskDurationUnit];

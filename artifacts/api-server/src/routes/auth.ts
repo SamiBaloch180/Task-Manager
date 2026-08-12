@@ -32,11 +32,21 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   });
 
   if (error) {
-    // Handle duplicate email gracefully
-    if (error.message.toLowerCase().includes("already registered") || error.status === 422) {
+    // Log the full error so we can see it in server logs
+    console.error("[register] createUser error:", JSON.stringify(error));
+
+    const msg: string =
+      (error as { message?: string }).message ??
+      (error as { msg?: string }).msg ??
+      JSON.stringify(error);
+
+    if (msg.toLowerCase().includes("already registered") ||
+        msg.toLowerCase().includes("already been registered") ||
+        msg.toLowerCase().includes("user already") ||
+        (error as { status?: number }).status === 422) {
       res.status(409).json({ error: "An account with this email already exists." });
     } else {
-      res.status(400).json({ error: error.message });
+      res.status(400).json({ error: msg || "Registration failed. Please try again." });
     }
     return;
   }

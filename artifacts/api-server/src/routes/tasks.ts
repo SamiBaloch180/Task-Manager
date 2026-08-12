@@ -77,6 +77,32 @@ router.get("/tasks", requireAuth, async (req: AuthRequest, res): Promise<void> =
     return;
   }
 
+  // Auto-expire overdue tasks — mark pending/in_progress tasks past their deadline as incomplete
+  const now = new Date().toISOString();
+  const overdueIds = (data ?? [])
+    .filter(
+      (t) =>
+        (t.status === "pending" || t.status === "in_progress") &&
+        t.deadline &&
+        t.deadline < now,
+    )
+    .map((t) => t.id as string);
+
+  if (overdueIds.length > 0) {
+    await supabaseAdmin
+      .from("tasks")
+      .update({ status: "incomplete", completed_at: null })
+      .in("id", overdueIds);
+
+    // Patch in-memory so we return updated status without a second DB round-trip
+    for (const t of data ?? []) {
+      if (overdueIds.includes(t.id as string)) {
+        t.status = "incomplete";
+        t.completed_at = null;
+      }
+    }
+  }
+
   res.json(await enrichTasks(data ?? []));
 });
 

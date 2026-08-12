@@ -23,6 +23,8 @@ export * from './taskStatusUpdate';
 export * from './taskStatusUpdateStatus';
 export * from './userProfile';
 export * from './userProfileRole';
+export * from './userProfileStatus';
 export * from './userSync';
 export * from './userUpdate';
 export * from './userUpdateRole';
+export * from './userUpdateStatus';

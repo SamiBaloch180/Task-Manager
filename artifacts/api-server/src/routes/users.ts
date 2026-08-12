@@ -24,6 +24,7 @@ router.get(
       fullName: p.full_name,
       email: p.email,
       role: p.role,
+      status: p.status,
       isActive: p.is_active,
       createdAt: p.created_at,
     });
@@ -52,6 +53,7 @@ router.post(
           full_name: fullName,
           email,
           role: "employee",
+          status: "pending",
           is_active: true,
         },
         { onConflict: "id" },
@@ -70,6 +72,7 @@ router.post(
       fullName: data.full_name,
       email: data.email,
       role: data.role,
+      status: data.status,
       isActive: data.is_active,
       createdAt: data.created_at,
     });
@@ -98,6 +101,7 @@ router.get(
         fullName: p.full_name,
         email: p.email,
         role: p.role,
+        status: p.status,
         isActive: p.is_active,
         createdAt: p.created_at,
       })),
@@ -128,6 +132,7 @@ router.get(
       fullName: data.full_name,
       email: data.email,
       role: data.role,
+      status: data.status,
       isActive: data.is_active,
       createdAt: data.created_at,
     });
@@ -140,16 +145,18 @@ router.patch(
   requireAdmin,
   async (req: AuthRequest, res): Promise<void> => {
     const { userId } = req.params;
-    const { fullName, isActive, role } = req.body as {
+    const { fullName, isActive, role, status } = req.body as {
       fullName?: string;
       isActive?: boolean;
       role?: "admin" | "employee";
+      status?: "pending" | "approved" | "rejected";
     };
 
     const updates: Record<string, unknown> = {};
     if (fullName !== undefined) updates.full_name = fullName;
     if (isActive !== undefined) updates.is_active = isActive;
     if (role !== undefined) updates.role = role;
+    if (status !== undefined) updates.status = status;
 
     const { data, error } = await supabaseAdmin
       .from("profiles")
@@ -169,10 +176,33 @@ router.patch(
       fullName: data.full_name,
       email: data.email,
       role: data.role,
+      status: data.status,
       isActive: data.is_active,
       createdAt: data.created_at,
     });
   },
 );
+
+  // DELETE /users/:userId — admin: hard delete user and all related data
+  router.delete(
+    "/users/:userId",
+    requireAdmin,
+    async (req: AuthRequest, res): Promise<void> => {
+      const { userId } = req.params;
+
+      // Clean up user data from DB tables
+      await supabaseAdmin.from("tasks").delete().eq("assigned_to", userId);
+      await supabaseAdmin.from("attendance").delete().eq("employee_id", userId);
+      await supabaseAdmin.from("profiles").delete().eq("id", userId);
+
+      // Delete auth user from Supabase Auth
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (error && !error.message.includes("User not found")) {
+        res.status(500).json({ error: error.message });
+        return;
+      }
+      res.status(204).send();
+    },
+  );
 
 export default router;

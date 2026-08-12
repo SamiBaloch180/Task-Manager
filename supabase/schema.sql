@@ -9,30 +9,32 @@ CREATE TABLE IF NOT EXISTS profiles (
   full_name   TEXT NOT NULL,
   email       TEXT NOT NULL UNIQUE,
   role        TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('admin', 'employee')),
+  status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   is_active   BOOLEAN NOT NULL DEFAULT TRUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Trigger: auto-create a profile row when a new auth.users row is inserted
-CREATE OR REPLACE FUNCTION handle_new_user()
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO profiles (id, full_name, email, role)
+  INSERT INTO public.profiles (id, full_name, email, role, status)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'role', 'employee')
+    COALESCE(NEW.raw_user_meta_data->>'role', 'employee'),
+    'pending'
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE PROCEDURE handle_new_user();
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
 -- 2. TASKS
 CREATE TABLE IF NOT EXISTS tasks (

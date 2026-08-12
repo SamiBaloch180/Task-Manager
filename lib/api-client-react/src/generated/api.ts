@@ -513,6 +513,77 @@ export const useUpdateUser = <TError = ErrorType<unknown>,
       return useMutation(getUpdateUserMutationOptions(options));
     }
 
+export const getDeleteUserUrl = (userId: string,) => {
+
+
+
+
+  return `/api/users/${userId}`
+}
+
+/**
+ * @summary Delete a user (Admin only)
+ */
+export const deleteUser = async (userId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteUserUrl(userId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteUserMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{userId: string}, TContext> => {
+
+const mutationKey = ['deleteUser'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteUser>>, {userId: string}> = (props) => {
+          const {userId} = props ?? {};
+
+          return  deleteUser(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteUserMutationResult = NonNullable<Awaited<ReturnType<typeof deleteUser>>>
+
+    export type DeleteUserMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a user (Admin only)
+ */
+export const useDeleteUser = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteUser>>, TError,{userId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteUser>>,
+        TError,
+        {userId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteUserMutationOptions(options));
+    }
+
 export const getListTasksUrl = () => {
 
 

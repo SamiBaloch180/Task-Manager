@@ -26,6 +26,7 @@ export const GetMeResponse = zod.object({
   "fullName": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'employee']),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
   "isActive": zod.boolean(),
   "createdAt": zod.string()
 })
@@ -45,6 +46,7 @@ export const SyncMeResponse = zod.object({
   "fullName": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'employee']),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
   "isActive": zod.boolean(),
   "createdAt": zod.string()
 })
@@ -59,6 +61,7 @@ export const ListUsersResponseItem = zod.object({
   "fullName": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'employee']),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
   "isActive": zod.boolean(),
   "createdAt": zod.string()
 })
@@ -78,6 +81,7 @@ export const GetUserResponse = zod.object({
   "fullName": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'employee']),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
   "isActive": zod.boolean(),
   "createdAt": zod.string()
 })
@@ -93,7 +97,8 @@ export const UpdateUserParams = zod.object({
 export const UpdateUserBody = zod.object({
   "fullName": zod.string().optional(),
   "isActive": zod.boolean().optional(),
-  "role": zod.enum(['admin', 'employee']).optional()
+  "role": zod.enum(['admin', 'employee']).optional(),
+  "status": zod.enum(['pending', 'approved', 'rejected']).optional()
 })
 
 export const UpdateUserResponse = zod.object({
@@ -102,9 +107,20 @@ export const UpdateUserResponse = zod.object({
   "fullName": zod.string(),
   "email": zod.string(),
   "role": zod.enum(['admin', 'employee']),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
   "isActive": zod.boolean(),
   "createdAt": zod.string()
 })
+
+
+/**
+ * @summary Delete a user (Admin only)
+ */
+export const DeleteUserParams = zod.object({
+  "userId": zod.coerce.string()
+})
+
+export const DeleteUserResponse = zod.void()
 
 
 /**

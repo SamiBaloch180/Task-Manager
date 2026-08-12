@@ -5,6 +5,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from 'wouter';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
 
 // Pages
 import Landing from '@/pages/landing';
@@ -27,8 +29,41 @@ const queryClient = new QueryClient({
   },
 });
 
+function PendingApproval({ status }: { status: 'pending' | 'rejected' }) {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center bg-background p-4">
+      <div className="max-w-md w-full bg-card border rounded-lg shadow-sm p-8 text-center space-y-6">
+        <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+          {status === 'pending' ? (
+            <svg className="w-8 h-8 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          ) : (
+            <svg className="w-8 h-8 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          )}
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {status === 'pending' ? 'Pending Approval' : 'Account Rejected'}
+        </h1>
+        <p className="text-muted-foreground">
+          {status === 'pending'
+            ? 'Your account has been created and is waiting for an administrator to approve it. Please check back later.'
+            : 'Your account access has been rejected by an administrator. If you believe this is a mistake, please contact support.'}
+        </p>
+        <div className="pt-4 border-t">
+          <Button variant="outline" className="w-full" onClick={handleSignOut}>
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ component: Component, allowedRole }: { component: React.ComponentType, allowedRole?: 'admin' | 'employee' }) {
-  const { session, role, isLoading } = useAuth();
+  const { session, role, status, isLoading } = useAuth();
   
   if (isLoading) {
     return <div className="h-screen w-full flex items-center justify-center"><div className="animate-pulse flex flex-col items-center"><div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div><p className="mt-4 text-sm text-muted-foreground font-mono">Authenticating...</p></div></div>;
@@ -37,8 +72,16 @@ function ProtectedRoute({ component: Component, allowedRole }: { component: Reac
   if (!session) {
     return <Redirect to="/sign-in" />;
   }
+
+  if (status === 'pending' || status === 'rejected') {
+    return <PendingApproval status={status} />;
+  }
+
+  if (!role) {
+    return <div className="h-screen w-full flex items-center justify-center p-8 text-center text-destructive">Error loading profile. Please try refreshing or sign out.</div>;
+  }
   
-  if (allowedRole && role && role !== allowedRole) {
+  if (allowedRole && role !== allowedRole) {
     return <Redirect to={role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'} />;
   }
 
@@ -50,13 +93,19 @@ function ProtectedRoute({ component: Component, allowedRole }: { component: Reac
 }
 
 function AuthRoute({ component: Component }: { component: React.ComponentType }) {
-  const { session, role, isLoading } = useAuth();
+  const { session, role, status, isLoading } = useAuth();
   
   if (isLoading) {
     return <div className="h-screen w-full flex items-center justify-center"><div className="animate-pulse flex flex-col items-center"><div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div></div>;
   }
   
-  if (session && role) {
+  if (session) {
+    if (!role) {
+       return <div className="h-screen w-full flex items-center justify-center p-8 text-center text-destructive">Error loading profile. Please try refreshing or sign out.</div>;
+    }
+    if (status === 'pending' || status === 'rejected') {
+      return <PendingApproval status={status} />;
+    }
     return <Redirect to={role === 'admin' ? '/admin/dashboard' : '/employee/dashboard'} />;
   }
   
