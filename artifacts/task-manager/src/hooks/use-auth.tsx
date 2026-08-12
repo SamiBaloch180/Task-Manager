@@ -77,6 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       syncMe.mutate({ data: { fullName, email } }, {
         onSuccess: () => {
           refetchProfile();
+        },
+        onError: (err) => {
+          console.error("Failed to sync profile:", err);
+          // @ts-ignore - force a terminal error to stop the spinner
+          error.status = 500;
+          setIsLoadingSession(false);
+          // force re-render by calling a dummy state update
+          setUser(user => user ? {...user} : null);
         }
       });
     }

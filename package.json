@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
@@ -13,6 +12,7 @@
     "@rollup/rollup-win32-x64-msvc": "^4.62.4",
     "@tailwindcss/oxide-win32-x64-msvc": "^4.3.3",
     "@types/pg": "^8.20.0",
+    "@vercel/node": "^5.9.8",
     "lightningcss-win32-x64-msvc": "^1.33.0",
     "pg": "^8.22.0",
     "prettier": "^3.9.6",
