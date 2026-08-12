@@ -41,14 +41,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncMe = useSyncMe();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.access_token) {
-        setAuthTokenGetter(() => Promise.resolve(session.access_token));
-      }
-      setIsLoadingSession(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.access_token) {
+          setAuthTokenGetter(() => Promise.resolve(session.access_token));
+        }
+      })
+      .catch((err) => {
+        console.error("Supabase getSession error:", err);
+      })
+      .finally(() => {
+        setIsLoadingSession(false);
+      });
 
     const {
       data: { subscription },
@@ -69,7 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Handle JIT Provisioning
   useEffect(() => {
-    if (error && (error as any).status === 404 && user) {
+    const is404 = error && ((error as any)?.status === 404 || (error as any)?.response?.status === 404);
+    if (is404 && user && !syncMe.isPending && !syncMe.isError) {
       // 404 means profile doesn't exist yet, we need to sync it
       const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User';
       const email = user.email || '';
@@ -80,20 +87,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
         onError: (err) => {
           console.error("Failed to sync profile:", err);
-          // @ts-ignore - force a terminal error to stop the spinner
-          error.status = 500;
-          setIsLoadingSession(false);
-          // force re-render by calling a dummy state update
-          setUser(user => user ? {...user} : null);
         }
       });
     }
   }, [error, user, syncMe, refetchProfile]);
 
-  // A 404 error means we are going to create the profile via JIT provisioning.
-  // Any other error is terminal and we should stop loading to prevent an infinite spinner.
-  const isTerminalError = error && (error as any).status !== 404;
-  const isProfileLoading = !!session && (!profile && !isTerminalError);
+  const isProfileLoading = !!session && (isLoadingProfile || syncMe.isPending);
   const isLoading = isLoadingSession || isProfileLoading;
 
   return (

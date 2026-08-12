@@ -62,6 +62,36 @@ function PendingApproval({ status }: { status: 'pending' | 'rejected' }) {
   );
 }
 
+function ErrorProfileScreen() {
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  return (
+    <div className="h-screen w-full flex flex-col items-center justify-center bg-background p-4">
+      <div className="max-w-md w-full bg-card border rounded-lg shadow-sm p-8 text-center space-y-6">
+        <div className="w-16 h-16 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-4">
+          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Error Loading Profile</h1>
+        <p className="text-muted-foreground text-sm">
+          Unable to retrieve your account profile details. Please verify your connection or try signing out and signing back in.
+        </p>
+        <div className="pt-4 border-t flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={() => window.location.reload()}>
+            Retry
+          </Button>
+          <Button variant="destructive" className="flex-1" onClick={handleSignOut}>
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ component: Component, allowedRole }: { component: React.ComponentType, allowedRole?: 'admin' | 'employee' }) {
   const { session, role, status, isLoading } = useAuth();
   
@@ -78,7 +108,7 @@ function ProtectedRoute({ component: Component, allowedRole }: { component: Reac
   }
 
   if (!role) {
-    return <div className="h-screen w-full flex items-center justify-center p-8 text-center text-destructive">Error loading profile. Please try refreshing or sign out.</div>;
+    return <ErrorProfileScreen />;
   }
   
   if (allowedRole && role !== allowedRole) {
@@ -101,7 +131,7 @@ function AuthRoute({ component: Component }: { component: React.ComponentType })
   
   if (session) {
     if (!role) {
-       return <div className="h-screen w-full flex items-center justify-center p-8 text-center text-destructive">Error loading profile. Please try refreshing or sign out.</div>;
+       return <ErrorProfileScreen />;
     }
     if (status === 'pending' || status === 'rejected') {
       return <PendingApproval status={status} />;
