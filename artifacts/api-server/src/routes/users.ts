@@ -24,7 +24,7 @@ router.get(
       fullName: p.full_name,
       email: p.email,
       role: p.role,
-      status: p.status,
+      status: p.is_active ? "active" : "inactive",
       isActive: p.is_active,
       createdAt: p.created_at,
     });
@@ -188,7 +188,7 @@ router.patch(
     "/users/:userId",
     requireAdmin,
     async (req: AuthRequest, res): Promise<void> => {
-      const { userId } = req.params;
+      const userId = req.params.userId as string;
 
       // Clean up user data from DB tables
       await supabaseAdmin.from("tasks").delete().eq("assigned_to", userId);
