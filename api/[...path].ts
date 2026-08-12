@@ -1,16 +1,28 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createClient } from "@supabase/supabase-js";
 
-// ─── Supabase admin client ────────────────────────────────────────────────────
+// ─── Supabase config ──────────────────────────────────────────────────────────
 const DEFAULT_SUPABASE_URL = "https://nzbndejhzcctvqxnozeq.supabase.co";
-const DEFAULT_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56Ym5kZWpoemNjdHZxeG5vemVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NzU0NzYsImV4cCI6MjEwMTM1MTQ3Nn0.57R1cpni1cgMd7icmUiN89G8vGDn--rgyiaS22-JGYQ";
+const DEFAULT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56Ym5kZWpoemNjdHZxeG5vemVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3NzU0NzYsImV4cCI6MjEwMTM1MTQ3Nn0.57R1cpni1cgMd7icmUiN89G8vGDn--rgyiaS22-JGYQ";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_KEY;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY;
+// Service role key bypasses RLS — used for admin-level DB operations
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
 
-const supabase = createClient(supabaseUrl, supabaseKey, {
+// Admin client — bypasses RLS (only available when service role key is set)
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
+
+// Creates a client that runs queries AS the authenticated user, satisfying RLS policies.
+// Falls back to admin client for routes that need full access (when service key is set).
+function makeUserClient(userToken: string) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${userToken}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function extractToken(req: IncomingMessage): string | null {
@@ -19,20 +31,36 @@ function extractToken(req: IncomingMessage): string | null {
   return null;
 }
 
-async function getUser(token: string) {
-  const { data, error } = await (supabase.auth as any).getUser(token);
+async function getAuthUser(token: string) {
+  // Use anon client to verify the JWT via Supabase Auth service
+  const anonClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await (anonClient.auth as any).getUser(token);
   if (error || !data.user) return null;
   return data.user;
 }
 
-async function getProfile(userId: string) {
-  const { data } = await supabase
+async function getProfile(userId: string, userToken: string) {
+  // Query using the user's own JWT so RLS policy (auth.uid() = id) is satisfied
+  const db = makeUserClient(userToken);
+  const { data, error } = await db
     .from("profiles")
     .select("*")
     .eq("id", userId)
     .single();
+  if (error) {
+    // If user client fails (RLS too strict), fall back to admin client
+    const { data: adminData } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+    return adminData;
+  }
   return data;
 }
+
 
 function formatProfile(p: Record<string, unknown>) {
   return {
@@ -104,7 +132,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     if (!email || !password || !fullName) {
       return send(res, 400, { error: "email, password, and fullName are required" });
     }
-    const { data, error } = await (supabase.auth as any).admin.createUser({
+    const { data, error } = await (supabaseAdmin.auth as any).admin.createUser({
       email, password,
       email_confirm: true,
       user_metadata: { full_name: fullName, role: "employee" },
@@ -116,7 +144,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
       }
       return send(res, 400, { error: msg });
     }
-    const { data: signInData } = await (supabase.auth as any).signInWithPassword({ email, password });
+    const { data: signInData } = await (supabaseAdmin.auth as any).signInWithPassword({ email, password });
     return send(res, 201, {
       user: { id: data.user.id, email: data.user.email, fullName },
       session: signInData?.session ?? null,
@@ -127,11 +155,11 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   if (path === "auth/confirm-existing" && method === "POST") {
     const { email } = body as Record<string, string>;
     if (!email) return send(res, 400, { error: "email is required" });
-    const { data: listData } = await (supabase.auth as any).admin.listUsers();
+    const { data: listData } = await (supabaseAdmin.auth as any).admin.listUsers();
     const user = listData?.users.find((u: { email?: string }) => u.email === email);
     if (!user) return send(res, 404, { error: "User not found" });
     if (user.email_confirmed_at) return send(res, 200, { message: "Email already confirmed" });
-    await (supabase.auth as any).admin.updateUserById(user.id, { email_confirm: true });
+    await (supabaseAdmin.auth as any).admin.updateUserById(user.id, { email_confirm: true });
     return send(res, 200, { message: "Email confirmed. You can now sign in." });
   }
 
@@ -139,10 +167,10 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   const token = extractToken(req);
   if (!token) return send(res, 401, { error: "Unauthorized" });
 
-  const authUser = await getUser(token);
+  const authUser = await getAuthUser(token);
   if (!authUser) return send(res, 401, { error: "Invalid or expired token" });
 
-  const profile = await getProfile(authUser.id);
+  const profile = await getProfile(authUser.id, token);
   const isAdmin = profile?.role === "admin";
 
   // ─── GET /users/me ─────────────────────────────────────────────────────────
@@ -159,7 +187,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     }
     // Determine role from auth user metadata; default to employee
     const metaRole = (authUser.user_metadata?.role as string) || "employee";
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("profiles")
       .upsert({
         id: authUser.id, full_name: fullName, email,
@@ -174,7 +202,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   // ─── GET /users ────────────────────────────────────────────────────────────
   if (path === "users" && method === "GET") {
     if (!isAdmin) return send(res, 403, { error: "Admin access required" });
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("profiles").select("*").order("created_at", { ascending: false });
     if (error) return send(res, 500, { error: error.message });
     return send(res, 200, (data ?? []).map(formatProfile));
@@ -185,7 +213,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   // ─── GET /users/:id ────────────────────────────────────────────────────────
   if (userByIdMatch && method === "GET") {
     if (!isAdmin) return send(res, 403, { error: "Admin access required" });
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", userByIdMatch[1]).single();
+    const { data, error } = await supabaseAdmin.from("profiles").select("*").eq("id", userByIdMatch[1]).single();
     if (error || !data) return send(res, 404, { error: "User not found" });
     return send(res, 200, formatProfile(data));
   }
@@ -199,7 +227,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     if (isActive !== undefined) updates.is_active = isActive;
     if (role !== undefined) updates.role = role;
     if (status !== undefined) updates.status = status;
-    const { data, error } = await supabase.from("profiles").update(updates).eq("id", userByIdMatch[1]).select().single();
+    const { data, error } = await supabaseAdmin.from("profiles").update(updates).eq("id", userByIdMatch[1]).select().single();
     if (error || !data) return send(res, 404, { error: "User not found" });
     return send(res, 200, formatProfile(data));
   }
@@ -208,9 +236,9 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   if (userByIdMatch && method === "DELETE") {
     if (!isAdmin) return send(res, 403, { error: "Admin access required" });
     const uid = userByIdMatch[1];
-    await supabase.from("tasks").delete().eq("assigned_to", uid);
-    await supabase.from("attendance").delete().eq("employee_id", uid);
-    const { error } = await (supabase.auth as any).admin.deleteUser(uid);
+    await supabaseAdmin.from("tasks").delete().eq("assigned_to", uid);
+    await supabaseAdmin.from("attendance").delete().eq("employee_id", uid);
+    const { error } = await (supabaseAdmin.auth as any).admin.deleteUser(uid);
     if (error) return send(res, 500, { error: error.message });
     res.writeHead(204); res.end();
     return;
@@ -218,7 +246,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
 
   // ─── GET /tasks ────────────────────────────────────────────────────────────
   if (path === "tasks" && method === "GET") {
-    let query = supabase.from("tasks").select("*").order("created_at", { ascending: false });
+    let query = supabaseAdmin.from("tasks").select("*").order("created_at", { ascending: false });
     if (!isAdmin) query = query.eq("assigned_to", authUser.id);
     const { data, error } = await query;
     if (error) return send(res, 500, { error: error.message });
@@ -229,7 +257,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   if (path === "tasks" && method === "POST") {
     if (!isAdmin) return send(res, 403, { error: "Admin access required" });
     const { title, description, assignedTo, priority, dueDate, status } = body as Record<string, unknown>;
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("tasks")
       .insert({ title, description, assigned_to: assignedTo, priority, due_date: dueDate, status: status ?? "todo" })
       .select().single();
@@ -248,7 +276,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
     if (status !== undefined) updates.status = status;
     if (priority !== undefined) updates.priority = priority;
     if (dueDate !== undefined) updates.due_date = dueDate;
-    const { data, error } = await supabase.from("tasks").update(updates).eq("id", taskByIdMatch[1]).select().single();
+    const { data, error } = await supabaseAdmin.from("tasks").update(updates).eq("id", taskByIdMatch[1]).select().single();
     if (error || !data) return send(res, 404, { error: "Task not found" });
     return send(res, 200, data);
   }
@@ -256,7 +284,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   // ─── DELETE /tasks/:id ─────────────────────────────────────────────────────
   if (taskByIdMatch && method === "DELETE") {
     if (!isAdmin) return send(res, 403, { error: "Admin access required" });
-    const { error } = await supabase.from("tasks").delete().eq("id", taskByIdMatch[1]);
+    const { error } = await supabaseAdmin.from("tasks").delete().eq("id", taskByIdMatch[1]);
     if (error) return send(res, 500, { error: error.message });
     res.writeHead(204); res.end();
     return;
@@ -264,7 +292,7 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
 
   // ─── GET /attendance ───────────────────────────────────────────────────────
   if (path === "attendance" && method === "GET") {
-    let query = supabase.from("attendance").select("*").order("date", { ascending: false });
+    let query = supabaseAdmin.from("attendance").select("*").order("date", { ascending: false });
     if (!isAdmin) query = query.eq("employee_id", authUser.id);
     const { data, error } = await query;
     if (error) return send(res, 500, { error: error.message });
@@ -274,9 +302,9 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   // ─── POST /attendance/check-in ─────────────────────────────────────────────
   if (path === "attendance/check-in" && method === "POST") {
     const today = new Date().toISOString().split("T")[0];
-    const { data: existing } = await supabase.from("attendance").select("*").eq("employee_id", authUser.id).eq("date", today).single();
+    const { data: existing } = await supabaseAdmin.from("attendance").select("*").eq("employee_id", authUser.id).eq("date", today).single();
     if (existing) return send(res, 409, { error: "Already checked in today" });
-    const { data, error } = await supabase.from("attendance").insert({ employee_id: authUser.id, date: today, check_in: new Date().toISOString() }).select().single();
+    const { data, error } = await supabaseAdmin.from("attendance").insert({ employee_id: authUser.id, date: today, check_in: new Date().toISOString() }).select().single();
     if (error) return send(res, 500, { error: error.message });
     return send(res, 201, data);
   }
@@ -284,13 +312,13 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
   // ─── POST /attendance/check-out ────────────────────────────────────────────
   if (path === "attendance/check-out" && method === "POST") {
     const today = new Date().toISOString().split("T")[0];
-    const { data: existing } = await supabase.from("attendance").select("*").eq("employee_id", authUser.id).eq("date", today).single();
+    const { data: existing } = await supabaseAdmin.from("attendance").select("*").eq("employee_id", authUser.id).eq("date", today).single();
     if (!existing) return send(res, 404, { error: "No check-in found for today" });
     if (existing.check_out) return send(res, 409, { error: "Already checked out today" });
     const checkOut = new Date().toISOString();
     const durationMs = new Date(checkOut).getTime() - new Date(existing.check_in).getTime();
     const durationHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100;
-    const { data, error } = await supabase.from("attendance").update({ check_out: checkOut, duration: durationHours }).eq("id", existing.id).select().single();
+    const { data, error } = await supabaseAdmin.from("attendance").update({ check_out: checkOut, duration: durationHours }).eq("id", existing.id).select().single();
     if (error) return send(res, 500, { error: error.message });
     return send(res, 200, data);
   }
@@ -304,10 +332,10 @@ export default async function handler(req: IncomingMessage & { query?: Record<st
       { count: completedTasks },
       { count: todayAttendance },
     ] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("tasks").select("*", { count: "exact", head: true }),
-      supabase.from("tasks").select("*", { count: "exact", head: true }).eq("status", "completed"),
-      supabase.from("attendance").select("*", { count: "exact", head: true }).eq("date", new Date().toISOString().split("T")[0]),
+      supabaseAdmin.from("profiles").select("*", { count: "exact", head: true }),
+      supabaseAdmin.from("tasks").select("*", { count: "exact", head: true }),
+      supabaseAdmin.from("tasks").select("*", { count: "exact", head: true }).eq("status", "completed"),
+      supabaseAdmin.from("attendance").select("*", { count: "exact", head: true }).eq("date", new Date().toISOString().split("T")[0]),
     ]);
     return send(res, 200, { totalUsers, totalTasks, completedTasks, todayAttendance });
   }
